@@ -1,0 +1,430 @@
+#version: '3.9'
+
+x-logging: &default-logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "20m"
+      max-file: "5"
+      compress: "true"
+      tag: "{{.Name}}"
+
+
+x-deploy: &default-deploy
+  deploy:
+    resources:
+      limits:
+        cpus: '0.75'
+        memory: 1G
+      reservations:
+        cpus: '0.25'
+        memory: 256M
+    update_config:
+      order: start-first
+      failure_action: rollback
+      delay: 10s
+      parallelism: 1
+      monitor: 30s
+    rollback_config:
+      parallelism: 1
+      delay: 10s
+      failure_action: pause
+    restart_policy:
+      condition: on-failure
+      delay: 5s
+      max_attempts: 3
+      window: 120s
+
+
+# OpenTelemetry environment variables
+x-otel-env: &otel-env-vars
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+  OTEL_RESOURCE_ATTRIBUTES: "service.name=${OTEL_SERVICE_NAME:-unknown_service},deployment.environment=${ASPNETCORE_ENVIRONMENT}"
+  OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+  OTEL_TRACES_SAMPLER_ARG: "1.0"
+  OTEL_METRICS_EXPORTER: "otlp"
+  OTEL_LOGS_EXPORTER: "otlp"
+  OTEL_PROPAGATORS: "tracecontext,baggage,b3"
+  OTEL_SERVICE_VERSION: "${SERVICE_VERSION:-1.0.0}"
+
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"   # RabbitMQ Port
+      - "15672:15672" # Management Console Port
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - app-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  identityservice:
+    <<: [ *default-deploy, *default-logging ]
+    build:
+      context: .
+      dockerfile: IdentityService/Dockerfile
+      args:
+        - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+    depends_on:
+      identity-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL_RESOURCE_ATTRIBUTES: "service.name=identity-service,deployment.environment=${ASPNETCORE_ENVIRONMENT}" # Fixed line
+      OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+      OTEL_TRACES_SAMPLER_ARG: "1.0"
+      OTEL_METRICS_EXPORTER: "otlp"
+      OTEL_LOGS_EXPORTER: "otlp"
+      OTEL_PROPAGATORS: "tracecontext,baggage,b3"
+      OTEL_SERVICE_VERSION: "${SERVICE_VERSION:-1.0.0}"
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=identity-db;Database=identitydb;Username=${IDENTITY_DB_USER};Password=${IDENTITY_DB_PASSWORD}
+      MessageBroker__Host: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      OTEL_SERVICE_NAME: "identity-service"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${APPDATA:-$HOME}/.microsoft/usersecrets:/home/app/.microsoft/usersecrets:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  orderservice:
+    <<: [ *default-deploy, *default-logging]
+    build:
+      context: .
+      dockerfile: OrderService/Dockerfile
+      args:
+        - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+    depends_on:
+      order-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL_RESOURCE_ATTRIBUTES: "service.name=order-service,deployment.environment=${ASPNETCORE_ENVIRONMENT}" # Fixed line
+      OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+      OTEL_TRACES_SAMPLER_ARG: "1.0"
+      OTEL_METRICS_EXPORTER: "otlp"
+      OTEL_LOGS_EXPORTER: "otlp"
+      OTEL_PROPAGATORS: "tracecontext,baggage,b3"
+      OTEL_SERVICE_VERSION: "${SERVICE_VERSION:-1.0.0}"
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=order-db;Database=orderdb;Username=${ORDER_DB_USER};Password=${ORDER_DB_PASSWORD}
+      MessageBroker__Host: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      OTEL_SERVICE_NAME: "order-service"
+    ports:
+      - "8082:8080"
+    volumes:
+      - ${APPDATA:-$HOME}/.microsoft/usersecrets:/home/app/.microsoft/usersecrets:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  paymentprocessorservice:
+    <<: [ *default-deploy, *default-logging]
+    build:
+      context: .
+      dockerfile: PaymentProcessorService/Dockerfile
+      args:
+        - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL_RESOURCE_ATTRIBUTES: "service.name=payment-processor-service,deployment.environment=${ASPNETCORE_ENVIRONMENT}" # Fixed line
+      OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+      OTEL_TRACES_SAMPLER_ARG: "1.0"
+      OTEL_METRICS_EXPORTER: "otlp"
+      OTEL_LOGS_EXPORTER: "otlp"
+      OTEL_PROPAGATORS: "tracecontext,baggage,b3"
+      OTEL_SERVICE_VERSION: "${SERVICE_VERSION:-1.0.0}"
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=payment-db;Database=paymentdb;Username=${PAYMENT_DB_USER};Password=${PAYMENT_DB_PASSWORD}
+      MessageBroker__Host: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      OTEL_SERVICE_NAME: "payment-processor-service"
+    ports:
+      - "8084:8080"
+    volumes:
+      - ${APPDATA:-$HOME}/.microsoft/usersecrets:/home/app/.microsoft/usersecrets:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  identity-db:
+    <<: [ *default-deploy, *default-logging ]
+    image: postgres:14-alpine
+    volumes:
+      - identity-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: identitydb
+      POSTGRES_USER: ${IDENTITY_DB_USER}
+      POSTGRES_PASSWORD: ${IDENTITY_DB_PASSWORD}
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U identityuser -d identitydb" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+
+  order-db:
+    <<: [ *default-deploy, *default-logging ]
+    image: postgres:14-alpine
+    volumes:
+      - order-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: orderdb
+      POSTGRES_USER: ${ORDER_DB_USER}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD}
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${ORDER_DB_USER} -d orderdb" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  payment-db:
+    <<: [ *default-deploy, *default-logging ]
+    image: postgres:14-alpine
+    volumes:
+      - payment-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: paymentdb
+      POSTGRES_USER: ${PAYMENT_DB_USER}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD}
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER} -d paymentdb" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    <<: [ *default-deploy, *default-logging ]
+    volumes:
+      - ./config/otel-collector-config.yaml:/etc/otel/config.yaml
+    command:
+      - '--config=/etc/otel/config.yaml'
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP http
+      - "8888:8888"   # Prometheus metrics exposed by the collector
+      - "8889:8889"   # Prometheus exporter metrics
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:13133"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - app-network
+    depends_on:
+      - loki
+      - prometheus
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    <<: [ *default-deploy, *default-logging ]
+    ports:
+      - "6831:6831/udp" # UDP port for Jaeger agent
+      - "16686:16686"   # UI
+      - "14250:14250"   # Model
+      - "14268:14268"   # Collector HTTP
+      - "14269:14269"   # Admin
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SAMPLING_STRATEGIES_FILE=/etc/jaeger/sampling.json
+    volumes:
+      - ./config/jaeger-sampling.json:/etc/jaeger/sampling.json
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:16686/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+  
+  loki:
+    image: grafana/loki:latest
+    <<: [ *default-deploy, *default-logging ]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./config/loki/loki-config.yaml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    <<: [ *default-deploy, *default-logging ]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      - --web.enable-lifecycle
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana:latest
+    <<: [ *default-deploy, *default-logging ]
+    ports:
+      - "3000:3000/tcp"
+    volumes:
+      - ./config/grafana:/etc/grafana/provisioning
+    environment:
+        - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+        - GF_AUTH_ANONYMOUS_ENABLED=true
+        - GF_AUTH_BASIC_ENABLED=false
+        - GF_FEATURE_TOGGLES_ENABLE=accessControlOnCall
+        - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - app-network
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    hostname: tempo
+    user: root
+    entrypoint:
+      - "sh"
+      - "-c"
+      - |
+        chown 10001:10001 /var/tempo && \
+        /tempo -config.file=/etc/tempo.yaml
+    volumes:
+      - ./tempo-data:/var/tempo
+      - ./config/tempo/tempo-config.yaml:/etc/tempo.yaml
+    ports:
+      - "24268:14268"  # jaeger ingest (changed to use 24268)
+      - "23200:3200"   # tempo (changed to use 23200)
+      - "29411:9411"   # zipkin (changed to use 29411)
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3200/ready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  identity-data:
+  order-data:
+  payment-data:
+  rabbitmq_data:
+  loki_data:
+  prometheus_data:
+  grafana_data:
+
+
+
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      driver: default

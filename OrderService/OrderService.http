@@ -1,0 +1,27 @@
+### Variables
+@baseUrl = http://localhost:8082/api
+@orderId = 0c11f678-dd88-4672-b5e9-36538528b6c5
+
+### Create Order
+POST {{baseUrl}}/Order
+Content-Type: application/json
+X-Api-Key: 33b27b35fcda4ce2bcb7a94fc9c23a2c
+X-Api-Secret: WCHQaqmqZ2AqlI3EQvhc0KWnAcmisgAxWmLtmoPs4Q0=
+
+{
+  "companyId": "d32056c5-488a-42f1-aca0-df6890a672ea",
+  "amount": 0.01,
+  "currency": "USD"
+}
+
+### Get Order by ID
+GET {{baseUrl}}/Order/{{orderId}}
+Content-Type: application/json
+
+### Get Orders by Company ID
+GET {{baseUrl}}/Order/company/d32056c5-488a-42f1-aca0-df6890a672ea
+Content-Type: application/json
+
+### Compute Total Orders for a Company
+GET {{baseUrl}}/Order/compute/d32056c5-488a-42f1-aca0-df6890a672ea
+Content-Type: application/json

@@ -1,0 +1,84 @@
+@IdentityService_HostAddress = http://localhost:5252
+
+### Register a new company - Success Case
+POST {{IdentityService_HostAddress}}/api/companies
+Content-Type: application/json
+
+{
+  "name": "Acme Corporation"
+}
+
+###
+
+### Register a new company - Validation Failure (Missing Name)
+POST {{IdentityService_HostAddress}}/api/companies
+Content-Type: application/json
+
+{
+  "name": ""
+}
+
+###
+
+### Get company by ID - Success Case
+GET {{IdentityService_HostAddress}}/api/companies/{{companyId}}
+Content-Type: application/json
+
+###
+
+### Get company by ID - Not Found
+GET {{IdentityService_HostAddress}}/api/companies/00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+
+###
+
+### Get company by ID - Invalid ID Format
+GET {{IdentityService_HostAddress}}/api/companies/invalid-guid
+Content-Type: application/json
+
+###
+
+### Validate API Key and Secret - Success Case
+POST {{IdentityService_HostAddress}}/api/companies/validate
+Content-Type: application/json
+
+{
+  "apiKey": "{{apiKey}}",
+  "apiSecret": "{{apiSecret}}"
+}
+
+###
+
+### Validate API Key and Secret - Invalid Credentials
+POST {{IdentityService_HostAddress}}/api/companies/validate
+Content-Type: application/json
+
+{
+  "apiKey": "invalid-api-key",
+  "apiSecret": "invalid-api-secret"
+}
+
+###
+
+### Validate API Key and Secret - Missing Fields
+POST {{IdentityService_HostAddress}}/api/companies/validate
+Content-Type: application/json
+
+{
+  "apiKey": "",
+  "apiSecret": ""
+}
+
+###
+
+### Get all companies with pagination - Success Case
+GET {{IdentityService_HostAddress}}/api/companies?page=1&pageSize=10
+Content-Type: application/json
+
+###
+
+### Get all companies with pagination - Invalid Parameters
+GET {{IdentityService_HostAddress}}/api/companies?page=0&pageSize=-5
+Content-Type: application/json
+
+###

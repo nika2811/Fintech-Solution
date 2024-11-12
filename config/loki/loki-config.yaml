@@ -1,0 +1,260 @@
+# auth_enabled: false
+
+# server:
+#   http_listen_port: 3100
+#   grpc_listen_port: 9096
+
+# common:
+#   instance_addr: 127.0.0.1
+#   path_prefix: /tmp/loki
+#   storage:
+#     filesystem:
+#       chunks_directory: /tmp/loki/chunks
+#       rules_directory: /tmp/loki/rules
+#   replication_factor: 1
+#   ring:
+#     kvstore:
+#       store: inmemory
+
+# frontend:
+#   max_outstanding_per_tenant: 2048
+
+# pattern_ingester:
+#   enabled: true
+
+# limits_config:
+#   max_global_streams_per_user: 0
+#   ingestion_rate_mb: 50000
+#   ingestion_burst_size_mb: 50000
+#   volume_enabled: true
+
+# query_range:
+#   results_cache:
+#     cache:
+#       embedded_cache:
+#         enabled: true
+#         max_size_mb: 100
+
+# schema_config:
+#   configs:
+#     - from: 2020-10-24
+#       store: tsdb
+#       object_store: filesystem
+#       schema: v13
+#       index:
+#         prefix: index_
+#         period: 24h
+
+# ruler:
+#   alertmanager_url: http://localhost:9093
+
+# analytics:
+#   reporting_enabled: false
+
+
+
+
+
+
+
+
+
+
+
+
+# # https://grafana.com/docs/loki/latest/configuration/examples/#complete-local-configyaml
+# # https://github.com/grafana/loki/blob/6a7403c4f5cd0a01dea13954fe6f51631f485ad1/examples/getting-started/loki-config.yaml
+# # https://github.com/grafana/loki/issues/2018#issuecomment-970789233
+# auth_enabled: false
+
+# server:
+#   http_listen_port: 3100
+
+# ingester:
+#   lifecycler:
+#     ring:
+#       kvstore:
+#         store: inmemory
+#       replication_factor: 1
+#     final_sleep: 0s
+#   chunk_idle_period: 5m
+#   chunk_retain_period: 30s
+#   wal:
+#     enabled: true
+#     dir: /loki/wal
+    
+# schema_config:
+#   configs:
+#   - from: 2020-05-15
+#     store: boltdb
+#     object_store: filesystem
+#     schema: v11
+#     index:
+#       prefix: index_
+#       period: 168h
+
+# storage_config:
+#   boltdb:
+#     directory: /tmp/loki/index
+
+#   filesystem:
+#     directory: /tmp/loki/chunks
+
+# limits_config:
+#   reject_old_samples: true
+#   reject_old_samples_max_age: 168h
+
+
+
+
+
+# auth_enabled: false
+
+
+# server:
+#   http_listen_port: 3100
+
+
+# common:
+#   path_prefix: /tmp/loki
+#   storage:
+#     filesystem:
+#       chunks_directory: /tmp/loki/chunks
+#       rules_directory: /tmp/loki/rules
+  
+#   replication_factor: 1
+
+
+#   ring:
+#     instance_addr: 127.0.0.1
+#     kvstore:
+#       store: inmemory
+
+
+# schema_config:
+#   configs:
+#     - from: 2020-09-07
+#       store: tsdb  # Change from boltdb-shipper to tsdb
+#       object_store: filesystem
+#       schema: v13  # Update from v12 to v13
+#       index:
+#         prefix: loki_index_
+#         period: 24h
+
+
+
+
+
+
+# # Global settings for Loki
+# auth_enabled: false
+
+# server:
+#   http_listen_port: 3100
+
+# distributor:
+#   ring:
+#     kvstore:
+#       store: memberlist
+
+# ingester:
+#   lifecycler:
+#     ring:
+#       kvstore:
+#         store: memberlist
+#       replication_factor: 1
+#   chunk_idle_period: 15m
+#   chunk_retain_period: 30s
+#   max_transfer_retries: 20
+
+# # Limits and validation configuration
+# limits_config:
+#   enforce_metric_name: false  # Remove this if unrecognized, or comment out if unsupported
+#   allow_structured_metadata: false  # Temporary fix to disable structured metadata support
+
+# schema_config:
+#   configs:
+#     - from: "2020-09-07"
+#       store: tsdb  # Change to `tsdb` for schema v13 compatibility with structured metadata
+#       object_store: filesystem  # Or change to `gcs` or `s3` based on your setup
+#       schema: v13  # Ensure version is at least 13 for structured metadata support
+#       index:
+#         prefix: index_
+#         period: 168h
+
+# storage_config:
+#   filesystem:
+#     chunks_directory: /var/loki/chunks
+#     rules_directory: /var/loki/rules
+
+# compactor:
+#   working_directory: /var/loki/compactor
+#   shared_store: filesystem
+
+# table_manager:
+#   retention_deletes_enabled: true
+#   retention_period: 24h
+
+# query_range:
+#   align_queries_with_step: true
+#   max_retries: 5
+#   split_queries_by_interval: 15m
+#   cache_results: true
+#   results_cache:
+#     cache:
+#       enable_fifocache: true
+#       fifocache:
+#         max_size: 1024
+
+# ruler:
+#   storage:
+#     type: local
+#   rule_path: /tmp/loki/rules-temp
+#   alertmanager_url: http://localhost:9093
+
+
+
+
+
+
+
+
+# This is a complete configuration to deploy Loki backed by the filesystem.
+# The index will be shipped to the storage via tsdb-shipper.
+
+auth_enabled: false
+
+limits_config:
+  allow_structured_metadata: true
+  volume_enabled: true
+
+server:
+  http_listen_port: 3100
+
+common:
+  ring:
+    instance_addr: 0.0.0.0
+    kvstore:
+      store: inmemory
+  replication_factor: 1
+  path_prefix: /tmp/loki
+
+schema_config:
+  configs:
+  - from: 2020-05-15
+    store: tsdb
+    object_store: filesystem
+    schema: v13
+    index:
+      prefix: index_
+      period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /tmp/loki/index
+    cache_location: /tmp/loki/index_cache
+  filesystem:
+    directory: /tmp/loki/chunks
+
+pattern_ingester:
+  enabled: true

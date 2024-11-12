@@ -1,0 +1,138 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+exporters:
+  otlphttp/logs:
+    endpoint: "http://loki:3100/otlp"
+    tls:
+      insecure: true
+  
+  otlp/tempo:
+    endpoint: tempo:3200
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/logs]
+
+  telemetry:
+    logs:
+      level: "info"
+    metrics:
+      level: "detailed"
+
+
+# receivers:
+#   otlp:
+#     protocols:
+#       grpc:
+#         endpoint: 0.0.0.0:4317
+#       http:
+#         endpoint: 0.0.0.0:4318
+
+# processors:
+#   batch:
+#     timeout: 1s
+#     send_batch_size: 1024
+
+# exporters:
+#   otlphttp/logs:
+#     endpoint: "http://loki:3100/otlp"
+#     tls:
+#       insecure: true
+  
+#   otlp/tempo:
+#     endpoint: tempo:3200
+#     tls:
+#       insecure: true
+  
+# service:
+#   pipelines:
+#     traces:
+#       receivers: [otlp]
+#       processors: [batch]
+#       exporters: [otlp/tempo]
+#     logs:
+#       receivers: [otlp]
+#       processors: [batch]
+#       exporters: [otlphttp/logs]
+
+#   telemetry:
+#     logs:
+#       level: "info"
+#     metrics:
+#       level: "detailed"
+
+
+
+##Working one 
+# receivers:
+#   otlp:
+#     protocols:
+#       grpc:
+#         endpoint: 0.0.0.0:4317
+#       http:
+#         endpoint: 0.0.0.0:4318
+
+# exporters:
+#   otlphttp/logs:
+#     endpoint: "http://loki:3100/otlp"
+#     tls:
+#       insecure: true
+
+# service:
+#   pipelines:
+#     logs:
+#       receivers: [otlp]
+#       exporters: [otlphttp/logs]
+
+
+
+
+
+
+## Best one
+# receivers:
+#   otlp:
+#     protocols:
+#       grpc:
+#         endpoint: 0.0.0.0:4317
+#       http:
+#         endpoint: 0.0.0.0:4318
+
+# exporters:
+#   otlphttp/logs:
+#     endpoint: "http://loki:3100/otlp"
+#     tls:
+#       insecure: true
+#   otlp/traces:
+#     endpoint: tempo:3200
+#     tls:
+#       insecure: true
+
+# service:
+#   pipelines:
+#     logs:
+#       receivers: [otlp]
+#       exporters: [otlphttp/logs]
+#     traces:
+#       receivers: [otlp]
+#       exporters: [otlp/traces]

@@ -1,0 +1,21 @@
+@PaymentProcessorService_HostAddress = http://localhost:5005
+
+### POST Process Payment
+POST {{PaymentProcessorService_HostAddress}}/api/payments
+Content-Type: application/json
+Accept: application/json
+
+{
+  "orderId": "your-order-id",
+  "cardNumber": "4111111111111111",
+  "expiryDate": "12/25"
+}
+
+
+### GET Payment By ID
+GET {{PaymentProcessorService_HostAddress}}/api/payments/{{paymentId}}
+Accept: application/json
+
+### GET All Payments
+GET {{PaymentProcessorService_HostAddress}}/api/payments
+Accept: application/json
