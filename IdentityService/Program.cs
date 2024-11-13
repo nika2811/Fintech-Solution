@@ -1,8 +1,9 @@
 using IdentityService.Middleware;
 using IdentityService.StartupExtensions;
-using IdentityService.StartupExtensions.Logging;
 using IdentityService.StartupExtensions.MassTransit;
+using IdentityService.StartupExtensions.Observability;
 using IdentityService.StartupExtensions.RateLimiter;
+using Prometheus;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -54,6 +55,7 @@ app.UseAuthorization();
 app.MapHealthChecks("/health");
 
 app.MapControllers();
+app.MapMetrics();
 
 app.UseRateLimiter();
 

@@ -1,5 +1,6 @@
-#version: '3.9'
+version: '3.9'
 
+# Global logging configuration
 x-logging: &default-logging
   logging:
     driver: "json-file"
@@ -9,7 +10,7 @@ x-logging: &default-logging
       compress: "true"
       tag: "{{.Name}}"
 
-
+# Enhanced deployment defaults with better resource management
 x-deploy: &default-deploy
   deploy:
     resources:
@@ -24,11 +25,12 @@ x-deploy: &default-deploy
       failure_action: rollback
       delay: 10s
       parallelism: 1
-      monitor: 30s
+      monitor: 60s
     rollback_config:
       parallelism: 1
       delay: 10s
       failure_action: pause
+      monitor: 30s
     restart_policy:
       condition: on-failure
       delay: 5s
@@ -39,14 +41,44 @@ x-deploy: &default-deploy
 # OpenTelemetry environment variables
 x-otel-env: &otel-env-vars
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
-  OTEL_RESOURCE_ATTRIBUTES: "service.name=${OTEL_SERVICE_NAME:-unknown_service},deployment.environment=${ASPNETCORE_ENVIRONMENT}"
+  OTEL_RESOURCE_ATTRIBUTES: "service.name=${OTEL_SERVICE_NAME:-unknown_service},deployment.environment=${ASPNETCORE_ENVIRONMENT},container.name={{.Name}}"
   OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
   OTEL_TRACES_SAMPLER_ARG: "1.0"
   OTEL_METRICS_EXPORTER: "otlp"
   OTEL_LOGS_EXPORTER: "otlp"
   OTEL_PROPAGATORS: "tracecontext,baggage,b3"
   OTEL_SERVICE_VERSION: "${SERVICE_VERSION:-1.0.0}"
+  OTEL_INSTRUMENTATION_RUNTIME_METRICS_ENABLED: "true"
 
+# Common database configuration
+x-db-common: &db-common
+  image: postgres:14-alpine
+  command:
+    - "postgres"
+    - "-c"
+    - "max_connections=200"
+    - "-c"
+    - "shared_buffers=256MB"
+    - "-c"
+    - "effective_cache_size=768MB"
+    - "-c"
+    - "maintenance_work_mem=64MB"
+    - "-c"
+    - "checkpoint_completion_target=0.9"
+    - "-c"
+    - "wal_buffers=16MB"
+    - "-c"
+    - "default_statistics_target=100"
+    - "-c"
+    - "random_page_cost=1.1"
+    - "-c"
+    - "effective_io_concurrency=200"
+    - "-c"
+    - "work_mem=4MB"
+    - "-c"
+    - "min_wal_size=1GB"
+    - "-c"
+    - "max_wal_size=4GB"
 
 services:
   rabbitmq:
@@ -58,7 +90,7 @@ services:
       - "5672:5672"   # RabbitMQ Port
       - "15672:15672" # Management Console Port
     healthcheck:
-      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      test: [ "CMD", "rabbitmqctl", "status" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -71,10 +103,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1'
+          memory: 1G
         reservations:
-          cpus: '0.25'
+          cpus: '0.5'
           memory: 256M
     logging:
       driver: "json-file"
@@ -89,22 +121,8 @@ services:
       dockerfile: IdentityService/Dockerfile
       args:
         - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
-    depends_on:
-      identity-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      jaeger:
-        condition: service_started
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
-      OTEL_RESOURCE_ATTRIBUTES: "service.name=identity-service,deployment.environment=${ASPNETCORE_ENVIRONMENT}" # Fixed line
-      OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
-      OTEL_TRACES_SAMPLER_ARG: "1.0"
-      OTEL_METRICS_EXPORTER: "otlp"
-      OTEL_LOGS_EXPORTER: "otlp"
-      OTEL_PROPAGATORS: "tracecontext,baggage,b3"
-      OTEL_SERVICE_VERSION: "${SERVICE_VERSION:-1.0.0}"
+      <<: *otel-env-vars
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=identity-db;Database=identitydb;Username=${IDENTITY_DB_USER};Password=${IDENTITY_DB_PASSWORD}
@@ -123,30 +141,23 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    depends_on:
+      identity-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
 
   orderservice:
-    <<: [ *default-deploy, *default-logging]
+    <<: [ *default-deploy, *default-logging ]
     build:
       context: .
       dockerfile: OrderService/Dockerfile
       args:
         - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
-    depends_on:
-      order-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      jaeger:
-        condition: service_started
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
-      OTEL_RESOURCE_ATTRIBUTES: "service.name=order-service,deployment.environment=${ASPNETCORE_ENVIRONMENT}" # Fixed line
-      OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
-      OTEL_TRACES_SAMPLER_ARG: "1.0"
-      OTEL_METRICS_EXPORTER: "otlp"
-      OTEL_LOGS_EXPORTER: "otlp"
-      OTEL_PROPAGATORS: "tracecontext,baggage,b3"
-      OTEL_SERVICE_VERSION: "${SERVICE_VERSION:-1.0.0}"
+      <<: *otel-env-vars
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=order-db;Database=orderdb;Username=${ORDER_DB_USER};Password=${ORDER_DB_PASSWORD}
@@ -165,30 +176,23 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    depends_on:
+      order-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
 
   paymentprocessorservice:
-    <<: [ *default-deploy, *default-logging]
+    <<: [ *default-deploy, *default-logging ]
     build:
       context: .
       dockerfile: PaymentProcessorService/Dockerfile
       args:
         - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
-    depends_on:
-      payment-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      jaeger:
-        condition: service_started
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
-      OTEL_RESOURCE_ATTRIBUTES: "service.name=payment-processor-service,deployment.environment=${ASPNETCORE_ENVIRONMENT}" # Fixed line
-      OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
-      OTEL_TRACES_SAMPLER_ARG: "1.0"
-      OTEL_METRICS_EXPORTER: "otlp"
-      OTEL_LOGS_EXPORTER: "otlp"
-      OTEL_PROPAGATORS: "tracecontext,baggage,b3"
-      OTEL_SERVICE_VERSION: "${SERVICE_VERSION:-1.0.0}"
+      <<: *otel-env-vars
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=payment-db;Database=paymentdb;Username=${PAYMENT_DB_USER};Password=${PAYMENT_DB_PASSWORD}
@@ -207,10 +211,16 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
 
   identity-db:
-    <<: [ *default-deploy, *default-logging ]
-    image: postgres:14-alpine
+    <<: [ *db-common, *default-deploy, *default-logging ]
     volumes:
       - identity-data:/var/lib/postgresql/data
     environment:
@@ -220,7 +230,7 @@ services:
     ports:
       - "5433:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U identityuser -d identitydb" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${IDENTITY_DB_USER} -d identitydb" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -231,8 +241,7 @@ services:
 
 
   order-db:
-    <<: [ *default-deploy, *default-logging ]
-    image: postgres:14-alpine
+    <<: [ *db-common, *default-deploy, *default-logging ]
     volumes:
       - order-data:/var/lib/postgresql/data
     environment:
@@ -252,8 +261,7 @@ services:
     restart: unless-stopped
 
   payment-db:
-    <<: [ *default-deploy, *default-logging ]
-    image: postgres:14-alpine
+    <<: [ *db-common, *default-deploy, *default-logging ]
     volumes:
       - payment-data:/var/lib/postgresql/data
     environment:
@@ -285,7 +293,7 @@ services:
       - "8888:8888"   # Prometheus metrics exposed by the collector
       - "8889:8889"   # Prometheus exporter metrics
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:13133"]
+      test: [ "CMD", "curl", "-f", "http://localhost:13133" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -310,7 +318,7 @@ services:
     volumes:
       - ./config/jaeger-sampling.json:/etc/jaeger/sampling.json
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:16686/health" ]
+      test: [ "CMD", "wget", "--spider", "http://localhost:16686/health" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -327,7 +335,7 @@ services:
       - ./config/loki/loki-config.yaml:/etc/loki/local-config.yaml
     command: -config.file=/etc/loki/local-config.yaml
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -345,13 +353,15 @@ services:
       - --web.console.libraries=/usr/share/prometheus/console_libraries
       - --web.console.templates=/usr/share/prometheus/consoles
       - --web.enable-lifecycle
+      - --web.enable-admin-api
+      - --storage.tsdb.wal-compression
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -366,13 +376,14 @@ services:
     volumes:
       - ./config/grafana:/etc/grafana/provisioning
     environment:
-        - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-        - GF_AUTH_ANONYMOUS_ENABLED=true
-        - GF_AUTH_BASIC_ENABLED=false
-        - GF_FEATURE_TOGGLES_ENABLE=accessControlOnCall
-        - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_FEATURE_TOGGLES_ENABLE=accessControlOnCall
+      - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -382,8 +393,6 @@ services:
       prometheus:
         condition: service_healthy
       loki:
-        condition: service_healthy
-      jaeger:
         condition: service_healthy
 
   tempo:

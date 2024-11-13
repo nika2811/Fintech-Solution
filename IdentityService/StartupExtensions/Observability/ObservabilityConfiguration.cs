@@ -1,6 +1,8 @@
-﻿using System.Data.Common;
+﻿using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Runtime.InteropServices;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
@@ -12,27 +14,26 @@ using Serilog.Enrichers.Span;
 using Serilog.Events;
 using Serilog.Sinks.OpenTelemetry;
 
-namespace IdentityService.StartupExtensions.Logging;
+namespace IdentityService.StartupExtensions.Observability;
 
-public static class LoggingConfiguration
+public static class ObservabilityConfiguration
 {
     private const string AppName = "IdentityService";
     private const string Version = "1.0.0";
-
-    // Single point of configuration for OpenTelemetry collector
-    private static readonly string OtelCollectorEndpoint = Environment.GetEnvironmentVariable("OTEL_COLLECTOR_ENDPOINT") 
-        ?? "http://otel-collector:4317";
+    private const string ServiceNamespace = "Identity";
+    private static readonly string OtelCollectorEndpoint = Environment.GetEnvironmentVariable("OTEL_COLLECTOR_ENDPOINT")
+                                                           ?? "http://otel-collector:4317";
 
     public static void AddCentralizedObservability(this WebApplicationBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        
+
         var activitySource = new ActivitySource(AppName, Version);
         var meter = new Meter(AppName, Version);
 
         builder.Services.AddSingleton(activitySource);
         builder.Services.AddSingleton(meter);
-        
+
         builder.Services.AddOpenTelemetry()
             .ConfigureResource(_ => CreateResourceBuilder(builder))
             .WithTracing(ConfigureTracing)
@@ -48,88 +49,97 @@ public static class LoggingConfiguration
             options.IncludeFormattedMessage = true;
             options.IncludeScopes = true;
             options.ParseStateValues = true;
-            options.AddOtlpExporter(ConfigureOtlpExporterOptions);
+            options.AddOtlpExporter(ConfigureOtlpExporter);
         });
     }
 
     private static ResourceBuilder CreateResourceBuilder(WebApplicationBuilder builder)
     {
+        var instanceId = Guid.NewGuid().ToString();
+
         return ResourceBuilder.CreateDefault()
-            .AddService(serviceName: AppName, serviceVersion: Version, serviceInstanceId: Environment.MachineName)
+            .AddService(AppName, serviceVersion: Version, serviceInstanceId: Environment.MachineName)
             .AddTelemetrySdk()
             .AddEnvironmentVariableDetector()
             .AddAttributes(new Dictionary<string, object>
             {
                 ["deployment.environment"] = builder.Environment.EnvironmentName,
                 ["host.name"] = Environment.MachineName,
-                ["process.runtime.name"] = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
-                ["service.namespace"] = "Identity",
-                ["service.instance.id"] = Guid.NewGuid().ToString(),
+                ["process.runtime.name"] = RuntimeInformation.FrameworkDescription,
+                ["service.namespace"] = ServiceNamespace,
+                ["service.instance.id"] = instanceId,
                 ["application"] = AppName,
                 ["application.version"] = Version
             });
     }
+
     private static void ConfigureTracing(TracerProviderBuilder tracing)
-        {
-            tracing
-                .AddSource(AppName)
-                .SetSampler(new ParentBasedSampler(new TraceIdRatioBasedSampler(1.0)))
-                .AddAspNetCoreInstrumentation(options =>
-                {
-                    options.RecordException = true;
-                    options.EnrichWithHttpRequest = (activity, httpRequest) =>
-                    {
-                        if (httpRequest.Headers.TryGetValue("x-correlation-id", out var correlationId))
-                        {
-                            activity.SetTag("custom.http.request.header.x-correlation-id", correlationId.ToString());
-                        }
-                    };
-                })
-                .AddHttpClientInstrumentation(options =>
-                {
-                    options.RecordException = true;
-                    options.EnrichWithHttpRequestMessage = (activity, request) =>
-                    {
-                        if (request.Headers.Contains("x-correlation-id"))
-                        {
-                            activity.SetTag("custom.http.request.header.x-correlation-id",
-                                request.Headers.GetValues("x-correlation-id").FirstOrDefault());
-                        }
-                    };
-                })
-                .AddEntityFrameworkCoreInstrumentation(options =>
-                {
-                    options.SetDbStatementForText = true;
-                    options.EnrichWithIDbCommand = (activity, command) =>
-                    {
-                        activity.SetTag("db.statement.parameters",
-                            string.Join(", ", command.Parameters.Cast<DbParameter>()
-                                .Select(p => $"{p.ParameterName}={p.Value}")));
-                    };
-                })
-                .AddSqlClientInstrumentation(options =>
-                {
-                    options.RecordException = true;
-                    options.SetDbStatementForText = true;
-                    options.EnableConnectionLevelAttributes = true;
-                })
-                .AddGrpcClientInstrumentation()
-                .AddOtlpExporter(ConfigureOtlpExporterOptions);
-        }
+    {
+        tracing
+            .AddSource(AppName)
+            .SetSampler(new ParentBasedSampler(new TraceIdRatioBasedSampler(1.0)))
+            .AddAspNetCoreInstrumentation(options =>
+            {
+                options.RecordException = true;
+                options.EnrichWithHttpRequest = EnrichHttpRequestWithCorrelationId;
+                options.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/health");
+            })
+            .AddHttpClientInstrumentation(options =>
+            {
+                options.RecordException = true;
+                options.EnrichWithHttpRequestMessage = EnrichHttpClientWithCorrelationId;
+                options.FilterHttpRequestMessage = msg => !msg.RequestUri!.PathAndQuery.StartsWith("/health");
+            })
+            .AddEntityFrameworkCoreInstrumentation(options =>
+            {
+                options.SetDbStatementForText = true;
+                options.EnrichWithIDbCommand = EnrichWithDbParameters;
+            })
+            .AddSqlClientInstrumentation(options =>
+            {
+                options.RecordException = true;
+                options.SetDbStatementForText = true;
+                options.EnableConnectionLevelAttributes = true;
+            })
+            .AddGrpcClientInstrumentation()
+            .AddOtlpExporter(ConfigureOtlpExporter);
+    }
+
+    private static void EnrichHttpRequestWithCorrelationId(Activity activity, HttpRequest request)
+    {
+        if (request.Headers.TryGetValue("x-correlation-id", out var correlationId))
+            activity.SetTag("custom.http.request.header.x-correlation-id", correlationId.ToString());
+    }
+
+    private static void EnrichHttpClientWithCorrelationId(Activity activity, HttpRequestMessage request)
+    {
+        if (request.Headers.Contains("x-correlation-id"))
+            activity.SetTag("custom.http.request.header.x-correlation-id",
+                request.Headers.GetValues("x-correlation-id").FirstOrDefault());
+    }
+
+    private static void EnrichWithDbParameters(Activity activity, IDbCommand command)
+    {
+        var parameters = command.Parameters.Cast<DbParameter>()
+            .Select(p => $"{p.ParameterName}={p.Value}")
+            .ToArray();
+
+        if (parameters.Length > 0) activity.SetTag("db.statement.parameters", string.Join(", ", parameters));
+    }
 
     private static void ConfigureMetrics(MeterProviderBuilder metrics)
-    { 
+    {
         metrics
             .AddMeter(AppName)
             .AddRuntimeInstrumentation()
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
             .AddEventCountersInstrumentation()
-            .AddOtlpExporter(ConfigureOtlpExporterOptions)
-            .AddProcessInstrumentation();
+            .AddProcessInstrumentation()
+            .AddOtlpExporter(ConfigureOtlpExporter);
     }
 
-    private static void ConfigureOtlpExporterOptions(OtlpExporterOptions options)
+    private static void ConfigureOtlpExporter(OtlpExporterOptions options)
     {
         options.Endpoint = new Uri(OtelCollectorEndpoint);
         options.Protocol = OtlpExportProtocol.Grpc;
@@ -170,11 +180,11 @@ public static class LoggingConfiguration
                     {
                         ["service.name"] = AppName,
                         ["service.version"] = Version,
-                        ["service.namespace"] = "Identity",
+                        ["service.namespace"] = ServiceNamespace,
                         ["deployment.environment"] = builder.Environment.EnvironmentName
                     };
                 })
-                .WriteTo.Console(outputTemplate: 
+                .WriteTo.Console(outputTemplate:
                     "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}");
         });
     }

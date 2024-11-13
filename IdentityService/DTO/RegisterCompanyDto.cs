@@ -4,6 +4,5 @@ namespace IdentityService.DTO;
 
 public class RegisterCompanyDto
 {
-    [Required]
-    public string Name { get; set; }
+    [Required] public string Name { get; set; }
 }

@@ -8,19 +8,9 @@ public class CompanyRepository(IdentityDbContext context) : ICompanyRepository
 {
     public async Task<Company> AddCompanyAsync(Company company, CancellationToken cancellationToken = default)
     {
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        try
-        {
-            await context.Companies.AddAsync(company, cancellationToken);
-            await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return company;
-        }
-        catch (Exception)
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
+        await context.Companies.AddAsync(company, cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
+        return company;
     }
 
     public async Task<Company?> GetCompanyByNameAsync(string name, CancellationToken cancellationToken = default)

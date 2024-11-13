@@ -1,8 +1,6 @@
-﻿using System.Diagnostics;
-using IdentityService.DTO;
+﻿using IdentityService.DTO;
 using IdentityService.Extension;
 using IdentityService.Services;
-using IdentityService.StartupExtensions.Logging;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IdentityService.Controllers;
@@ -13,7 +11,7 @@ public class CompaniesController(ICompanyService companyService) : ControllerBas
 {
     [HttpPost]
     public async Task<IActionResult> RegisterCompany([FromBody] RegisterCompanyDto dto)
-    { 
+    {
         var company = await companyService.RegisterCompanyAsync(dto.Name);
         return CreatedAtAction(nameof(GetCompanyById), new { id = company.Id }, company);
     }
