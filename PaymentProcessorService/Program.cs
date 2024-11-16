@@ -1,8 +1,9 @@
 using PaymentProcessorService.Middleware;
 using PaymentProcessorService.StartupExtensions;
-using PaymentProcessorService.StartupExtensions.Logging;
 using PaymentProcessorService.StartupExtensions.MassTransit;
+using PaymentProcessorService.StartupExtensions.Observability;
 using PaymentProcessorService.StartupExtensions.RateLimiter;
+using Prometheus;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -60,5 +61,6 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapMetrics();
 
 app.Run();

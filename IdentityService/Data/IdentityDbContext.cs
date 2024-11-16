@@ -15,6 +15,6 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
             entity.Property(c => c.Name).IsRequired().HasMaxLength(100);
             entity.Property(c => c.ApiKey).IsRequired().HasMaxLength(64);
             entity.Property(c => c.ApiSecret).IsRequired();
-        }).ApplyConfigurationsFromAssembly(typeof(IdentityDbContext).Assembly);
+        });
     }
 }

@@ -124,7 +124,7 @@ services:
     environment:
       <<: *otel-env-vars
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
-      ASPNETCORE_URLS: http://+:8080
+#      ASPNETCORE_URLS: "http://+:8080"
       ConnectionStrings__DefaultConnection: Host=identity-db;Database=identitydb;Username=${IDENTITY_DB_USER};Password=${IDENTITY_DB_PASSWORD}
       MessageBroker__Host: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       OTEL_SERVICE_NAME: "identity-service"
@@ -159,7 +159,7 @@ services:
     environment:
       <<: *otel-env-vars
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
-      ASPNETCORE_URLS: http://+:8080
+#      ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=order-db;Database=orderdb;Username=${ORDER_DB_USER};Password=${ORDER_DB_PASSWORD}
       MessageBroker__Host: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       OTEL_SERVICE_NAME: "order-service"
@@ -194,7 +194,7 @@ services:
     environment:
       <<: *otel-env-vars
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
-      ASPNETCORE_URLS: http://+:8080
+#      ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=payment-db;Database=paymentdb;Username=${PAYMENT_DB_USER};Password=${PAYMENT_DB_PASSWORD}
       MessageBroker__Host: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       OTEL_SERVICE_NAME: "payment-processor-service"
