@@ -1,3 +1,4 @@
+using IdentityService.Endpoints;
 using IdentityService.Middleware;
 using IdentityService.StartupExtensions;
 using IdentityService.StartupExtensions.MassTransit;
@@ -54,7 +55,7 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 
-app.MapControllers();
+app.MapCompaniesEndpoints();
 app.MapMetrics();
 
 app.UseRateLimiter();

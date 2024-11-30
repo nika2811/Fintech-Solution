@@ -2,6 +2,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using OrderService.Consumers;
 using OrderService.Data;
+using OrderService.Endpoints;
 using OrderService.Middleware;
 using OrderService.Repositories;
 using OrderService.Services;
@@ -66,7 +67,7 @@ app.UseHttpsRedirection();
 
 app.UseAuthorization();
 
-app.MapControllers();
+app.MapOrderEndpoints();
 app.MapMetrics();
 
 app.Run();

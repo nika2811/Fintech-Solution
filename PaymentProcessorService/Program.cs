@@ -1,3 +1,4 @@
+using PaymentProcessorService.Endpoints;
 using PaymentProcessorService.Middleware;
 using PaymentProcessorService.StartupExtensions;
 using PaymentProcessorService.StartupExtensions.MassTransit;
@@ -60,7 +61,7 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseAuthorization();
 
-app.MapControllers();
+app.MapPaymentEndpoints();
 app.MapMetrics();
 
 app.Run();
