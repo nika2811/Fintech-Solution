@@ -280,6 +280,28 @@ services:
       - app-network
     restart: unless-stopped
 
+  ocelotapigateway:
+    <<: [ *default-deploy, *default-logging ]
+    build:
+      context: .
+      dockerfile: OcelotApiGateway/Dockerfile
+      args:
+        - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+    environment:
+      <<: *otel-env-vars
+      OTEL_SERVICE_NAME: "ocelot-api-gateway"
+    ports:
+      - "5000:5000" # Expose API Gateway on port 5000
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+    restart: unless-stopped
+    
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     <<: [ *default-deploy, *default-logging ]

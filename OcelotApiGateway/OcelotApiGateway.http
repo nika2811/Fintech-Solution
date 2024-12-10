@@ -1,0 +1,78 @@
+### Ocelot API Gateway Requests
+@baseUrl = http://localhost:5000
+
+---
+
+### Identity Service - Validate Company
+POST {{baseUrl}}/identity/companies/validate
+Content-Type: application/json
+
+{
+  "apiKey": "{{apiKey}}",
+  "apiSecret": "{{apiSecret}}"
+}
+
+---
+
+### Identity Service - Get Company by ID
+GET {{baseUrl}}/identity/companies/{{companyId}}
+
+---
+
+### Identity Service - Create Company
+POST {{baseUrl}}/identity/companies
+Content-Type: application/json
+
+{
+  "name": "Acme Corp"
+}
+
+---
+
+### Order Service - Create Order
+POST {{baseUrl}}/orderservice/orders
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+X-API-Secret: {{apiSecret}}
+
+{
+  "companyId": "{{companyId}}",
+  "amount": 100.00,
+  "currency": "USD"
+}
+
+---
+
+### Order Service - Get Order by ID
+GET {{baseUrl}}/orderservice/orders/{{orderId}}
+X-API-Key: {{apiKey}}
+X-API-Secret: {{apiSecret}}
+
+---
+
+### Order Service - Get Orders by Company ID
+GET {{baseUrl}}/orderservice/orders/company/{{companyId}}
+X-API-Key: {{apiKey}}
+X-API-Secret: {{apiSecret}}
+
+---
+
+### Order Service - Compute Total Orders
+GET {{baseUrl}}/orderservice/orders/compute/{{companyId}}
+X-API-Key: {{apiKey}}
+X-API-Secret: {{apiSecret}}
+
+---
+
+### Order Service - Check if Order Exists
+GET {{baseUrl}}/orderservice/orders/{{orderId}}/exists?companyId={{companyId}}
+X-API-Key: {{apiKey}}
+X-API-Secret: {{apiSecret}}
+
+---
+
+### Variables
+@apiKey = f1531b2689fb477f805f62809d2cbf0c
+@apiSecret = s/+MYPp192goJiUxIoJHD6xmf0/BRNP6mLNfNWJU7Bc=
+@companyId = 8f87dbc3-663f-42c0-9bf8-9bcb1de75290
+@orderId = aede3276-ecf1-4cda-bc23-2c55ad03c2e3
