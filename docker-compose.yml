@@ -303,7 +303,7 @@ services:
     restart: unless-stopped
     
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.115.1
     <<: [ *default-deploy, *default-logging ]
     volumes:
       - ./config/otel-collector-config.yaml:/etc/otel/config.yaml
@@ -324,6 +324,7 @@ services:
     depends_on:
       - loki
       - prometheus
+      - tempo
 
   jaeger:
     image: jaegertracing/all-in-one:latest
@@ -433,12 +434,12 @@ services:
       - ./config/tempo/tempo-config.yaml:/etc/tempo.yaml
     ports:
       - "24268:14268"  # jaeger ingest (changed to use 24268)
-      - "23200:3200"   # tempo (changed to use 23200)
+      - "3200:3200"   # tempo (changed to use 23200)
       - "29411:9411"   # zipkin (changed to use 29411)
     networks:
       - app-network
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3200/ready" ]
+      test: [ "CMD", "wget", "--spider", "http://localhost:3200/ready" ]
       interval: 10s
       timeout: 5s
       retries: 3
