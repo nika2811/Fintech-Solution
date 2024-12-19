@@ -1,6 +1,7 @@
 using IdentityService.Endpoints;
 using IdentityService.Middleware;
 using IdentityService.StartupExtensions;
+using IdentityService.StartupExtensions.Consul;
 using IdentityService.StartupExtensions.MassTransit;
 using IdentityService.StartupExtensions.Observability;
 using IdentityService.StartupExtensions.RateLimiter;
@@ -19,6 +20,8 @@ builder.Services.ConfigureRateLimiter(builder.Configuration);
 
 builder.Services.AddMassTransitServices(builder.Configuration);
 
+builder.Services.AddConsulServiceDiscovery(builder.Configuration);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", builder =>
@@ -31,6 +34,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 

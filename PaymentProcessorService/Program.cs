@@ -1,6 +1,7 @@
 using PaymentProcessorService.Endpoints;
 using PaymentProcessorService.Middleware;
 using PaymentProcessorService.StartupExtensions;
+using PaymentProcessorService.StartupExtensions.Consul;
 using PaymentProcessorService.StartupExtensions.MassTransit;
 using PaymentProcessorService.StartupExtensions.Observability;
 using PaymentProcessorService.StartupExtensions.RateLimiter;
@@ -17,6 +18,8 @@ builder.Services.AddCustomServices(builder.Configuration);
 builder.Services.ConfigureRateLimiter(builder.Configuration);
 
 builder.Services.AddMassTransitServices(builder.Configuration);
+
+builder.Services.AddConsulServiceDiscovery(builder.Configuration);
 
 
 builder.Services.AddMemoryCache();
@@ -36,6 +39,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -61,6 +65,7 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseAuthorization();
 
+app.MapHealthChecks("/health");
 app.MapPaymentEndpoints();
 app.MapMetrics();
 

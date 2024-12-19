@@ -1,6 +1,8 @@
+using Consul;
 using Microsoft.OpenApi.Models;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
+using Ocelot.Provider.Consul;
 using Ocelot.Provider.Polly;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,14 +12,13 @@ builder.Configuration.AddJsonFile("ocelot.json", optional: false, reloadOnChange
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.ListenAnyIP(5000); // Expose on port 5000
-    options.ListenAnyIP(5001, listenOptions =>
-    {
-        listenOptions.UseHttps();
-    });
 });
 
 // Add services to the container
-builder.Services.AddOcelot(builder.Configuration).AddPolly();
+builder.Services.AddOcelot(builder.Configuration)
+    .AddConsul() // Enable Consul integration
+    .AddPolly();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -30,6 +31,11 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 builder.Services.AddHealthChecks();
+
+builder.Services.AddSingleton<IConsulClient, ConsulClient>(provider => new ConsulClient(config =>
+{
+    config.Address = new Uri("http://localhost:8500");
+}));
 
 // Build the app first
 var app = builder.Build();

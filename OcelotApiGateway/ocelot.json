@@ -47,6 +47,12 @@
     }
   ],
   "GlobalConfiguration": {
-    "BaseUrl": "http://localhost:5000"
+    "BaseUrl": "http://localhost:5000",
+    "ServiceDiscoveryProvider": {
+      "Type": "Consul",
+      "Host": "localhost",
+      "Port": 8500,
+      "PollingInterval": 5000
+    }
   }
 }
