@@ -2,25 +2,46 @@ receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: localhost:4317
+        endpoint: otel-collector:4317
       http:
-        endpoint: localhost:4318
+        endpoint: otel-collector:4318
 
 processors:
   batch:
-    timeout: 1s
-    send_batch_size: 1024
+    timeout: 5s
+    send_batch_size: 500
+    send_batch_max_size: 2000
 
 exporters:
   otlphttp/logs:
-    endpoint: "http://loki:3100/otlp"
+    endpoint: "${OTLP_HTTP_LOGS_ENDPOINT}"
     tls:
       insecure: true
-  
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      queue_size: 1000
+
   otlp/tempo:
-    endpoint: "http://tempo:4317"
+    endpoint: "${OTLP_GRPC_TRACES_ENDPOINT}"
     tls:
       insecure: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      queue_size: 1000
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
 
 service:
   pipelines:

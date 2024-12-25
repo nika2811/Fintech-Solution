@@ -333,7 +333,7 @@ services:
     
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.115.1
-    <<: [ *default-deploy, *default-logging ]
+    <<: [*default-deploy, *default-logging]
     volumes:
       - ./config/otel-collector-config.yaml:/etc/otel/config.yaml
     command:
@@ -344,10 +344,13 @@ services:
       - "8888:8888"   # Prometheus metrics exposed by the collector
       - "8889:8889"   # Prometheus exporter metrics
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:13133" ]
+      test: ["CMD", "wget --no-verbose --tries=1 --spider http://localhost:13133/health"]
       interval: 10s
       timeout: 5s
       retries: 3
+    environment:
+      OTLP_HTTP_LOGS_ENDPOINT: "http://loki:3100/otlp"
+      OTLP_GRPC_TRACES_ENDPOINT: "http://tempo:4317"
     networks:
       - app-network
     depends_on:
@@ -408,7 +411,7 @@ services:
       - --web.enable-admin-api
       - --storage.tsdb.wal-compression
     volumes:
-      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
@@ -452,15 +455,10 @@ services:
     container_name: tempo
     hostname: tempo
     user: root
-    entrypoint:
-      - "sh"
-      - "-c"
-      - |
-        chown 10001:10001 /var/tempo && \
-        /tempo -config.file=/etc/tempo.yaml
+    entrypoint: ["/bin/sh", "-c", "/tempo -config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo-data:/var/tempo
-      - ./config/tempo/tempo-config.yaml:/etc/tempo.yaml
+      - ./config/tempo/tempo-config.yaml:/etc/tempo.yaml:ro
     ports:
       - "24268:14268"  # jaeger ingest (changed to use 24268)
       - "3200:3200"   # tempo (changed to use 23200)
@@ -468,7 +466,7 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "http://localhost:3200/ready" ]
+      test: ["CMD", "wget --no-verbose --tries=1 --spider http://localhost:3200/ready"]
       interval: 10s
       timeout: 5s
       retries: 3
